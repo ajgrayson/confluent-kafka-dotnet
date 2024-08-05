@@ -168,6 +168,7 @@ namespace Confluent.Kafka
             IntPtr partitionsPtr,
             IntPtr opaque)
         {
+            var partitions = new List<TopicPartition>();
             try
             {
                 // Ensure registered handlers are never called as a side-effect of Dispose/Finalize (prevents deadlocks in common scenarios).
@@ -185,7 +186,7 @@ namespace Confluent.Kafka
                     throw new InvalidOperationException("Neither revoked nor lost partition handlers may return an updated assignment when a COOPERATIVE assignor is in use");
                 }
 
-                var partitions = SafeKafkaHandle.GetTopicPartitionOffsetErrorList(partitionsPtr).Select(p => p.TopicPartition).ToList();
+                partitions = SafeKafkaHandle.GetTopicPartitionOffsetErrorList(partitionsPtr).Select(p => p.TopicPartition).ToList();
 
                 if (err == ErrorCode.Local_AssignPartitions)
                 {
@@ -301,7 +302,14 @@ namespace Confluent.Kafka
             }
             catch (Exception e)
             {
-                Unassign();
+                if (kafkaHandle.RebalanceProtocol == "COOPERATIVE")
+                {
+                    IncrementalUnassign(partitions);
+                }
+                else
+                {
+                    Unassign();
+                }
                 handlerException = e;
             }
         }
